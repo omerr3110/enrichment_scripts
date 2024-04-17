@@ -11,7 +11,6 @@
 #outdir - where to save output file. If not entered, default is /Users/dgokhman/HUJI drive/R/R outputs/
 #locORser - running locally or on the server - affects on DBdir
 #comp - string variable - "diff_activity" - diff_active vs. active or "activity" - active vs. all
-#uniq - use unique gene lists or redundant
 
 TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORdep,locORser,comp)
 {
@@ -68,17 +67,11 @@ TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORde
   
   #intersect genelist with DB
   uniqueGenes <- unique(unlist(genelist))
-  #print(length(uniqueGenes))
   idxGenes <- which(unlist(gene2cat_World[,geneCol]) %in% uniqueGenes)
-  print(length(idxGenes))
   gene2cat_intersectedWithGenelist <- gene2cat_World[idxGenes,]
-  print(head(gene2cat_intersectedWithGenelist))
   intersectedGenes <- intersect(unlist(gene2cat_World[,geneCol]),unlist(genelist))
-  print(length(intersectedGenes))
   idxGenes <- match(intersectedGenes,gene2cat_World[,geneCol])
-  print(length(idxGenes))
   gene2cat_intersectedWithGenelist_unique <- gene2cat_World[idxGenes,]
-  print(head(gene2cat_intersectedWithGenelist_unique))
   
   colnames <- c("DB","Unique IDs entered","Genes from genelist in DB","Term","Enrichment","Observed","Expected","Genes","P-value","FDR")
   uniqueTerms <- unique(unlist(gene2cat_World[,catCol]))
@@ -163,7 +156,7 @@ TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORde
   
   #WRITE FILE
   if (substr(outdir,nchar(outdir)-1,nchar(outdir)) != "/") {outdir <- paste(outdir,"/",sep="")}
-  write.table(outTable, file=paste(outdir,db,"_",minGenes,"_",enrORdep,"_",comp,"_",uniq,"_TheGrandEnrich_enrich.txt",sep=""), 
+  write.table(outTable, file=paste(outdir,db,"_",minGenes,"_",enrORdep,"_",comp,"_TheGrandEnrich_enrich.txt",sep=""), 
               sep="\t", quote = F,na = "", row.names = F, col.names = T)
   
   return(outTable)
