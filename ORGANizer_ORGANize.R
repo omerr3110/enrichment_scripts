@@ -9,11 +9,11 @@
 #minGenes - minimum genes per organ. Organs with fewer genes will not be FDR-corrected.
 #onlySkel - T or F. T - analyze only skeleton-related organs.
 #enrORdep - check for enrichment or depletion?
-
+#locORser - running locally or on the server - affects on DBdir
+#comp - string variable - "diff_activity" - diff_active vs. active or "activity" - active vs. all
 #set working directory to the Dropbox folder
-setwd("C:/Users/nachshoe/Dropbox (Weizmann Institute)")
 
-ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfPheno,DBversion,minGenes,onlySkel,enrORdep)
+ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfPheno,DBversion,minGenes,onlySkel,enrORdep,locORser,comp)
 {
   if (missing(background)) {background <- c()}
   if (missing(minGenes)) {minGenes <- 0}
@@ -23,6 +23,8 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
   if (missing(DBversion)) {DBversion <- 14}
   if (missing(enrORdep)) {enrORdep <- "both"}
   if(missing(outpath)) {outpath <- "/Users/dgokhman/HUJI drive/R/R outputs/"}
+  if (missing(locORser)) {locORser <- "loc"}
+  if (missing(comp)) {comp <- "diff_activity"}
   
   #version
   if (as.numeric(DBversion) == 12) {DBversion <- "12_1"
@@ -47,7 +49,10 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
   
   #load ORGANizer DB #these files are just excel versions of the ORGANizer_World mat files
   library("readxl")
-  ORGANizer_World_path <- paste("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_World_",appendix,DBversion,".xlsx",sep="")
+  if (locORser == "ser"){
+    ORGANizer_World_path <- paste("/home/labs/davidgo/Collaboration/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_World_",appendix,DBversion,".xlsx",sep="")
+  } else{  ORGANizer_World_path <- paste("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_World_",appendix,DBversion,".xlsx",sep="")
+}
   Organs <- read_excel(ORGANizer_World_path,sheet="Organs",col_names=T)
   Systems <- read_excel(ORGANizer_World_path,sheet="Systems",col_names=T)
   GermLayers <- read_excel(ORGANizer_World_path,sheet="GermLayers",col_names=T)
@@ -62,7 +67,10 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
     #GermLayers <- GermLayers[idx,]
     #Systems <- Systems[idx,]
     #this option takes only skeletal organs
-    Organs_skel <- read_excel("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_Systems2BodyParts.xlsx",skip=0,col_names=T)
+    if (locORser == "ser"){
+      read_excel("/home/labs/davidgo/Collaboration/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_skeletalBodyParts.xlsx",skip=0,col_names=T)
+    } else{      Organs_skel <- read_excel("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/Gene ORGANizer/ORGANizer_Systems2BodyParts.xlsx",skip=0,col_names=T)
+    }
     Organs_skel <- unlist(Organs_skel[which(Organs_skel[,2]==1),1])
     idx <- c(1,2,match(Organs_skel,colnames(Organs)))
     Organs <- Organs[,idx]
@@ -110,12 +118,19 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
                           nrow(Organs_genelist[,oo]) - outTable[ll,"Observed"],
                           ((nrow(Organs[,oo])-sum(Organs[,oo]))) - (nrow(Organs_genelist[,oo]) - outTable[ll,"Observed"])),
                         nrow=2, byrow=T)
+      row_sums=rowSums(mat_org)
+      col_sums=colSums(mat_org)
+      tot_sum=sum(mat_org)
+      exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                       row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+      bool_mat=exp_mat<mat_org
+      mat_org_correctded=mat_org+as.data.frame.integer(bool_mat)
       if (enrORdep == "enr") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_org, alternative = "g")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_org_correctded, alternative = "g")$p.value
       } else if (enrORdep == "dep") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_org, alternative = "l")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_org_correctded, alternative = "l")$p.value
       } else if (enrORdep == "both") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_org, alternative = "t")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_org_correctded, alternative = "t")$p.value
       }
       # print(colnames(Organs %>% select(oo)))
       # print(mat_org)
@@ -152,12 +167,19 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
                           nrow(Systems_genelist[,oo]) - outTable[ll,"Observed"],
                           ((nrow(Systems[,oo])-sum(Systems[,oo]))) - (nrow(Systems_genelist[,oo]) - outTable[ll,"Observed"])),
                         nrow=2, byrow=T)
+      row_sums=rowSums(mat_sys)
+      col_sums=colSums(mat_sys)
+      tot_sum=sum(mat_sys)
+      exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                       row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+      bool_mat=exp_mat<mat_sys
+      mat_sys_correctded=mat_sys+as.data.frame.integer(bool_mat)
       if (enrORdep == "enr") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys, alternative = "g")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys_correctded, alternative = "g")$p.value
       } else if (enrORdep == "dep") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys, alternative = "l")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys_correctded, alternative = "l")$p.value
       } else if (enrORdep == "both") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys, alternative = "t")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_sys_correctded, alternative = "t")$p.value
       }
       
       # if (enrORdep == "enr") {
@@ -192,12 +214,19 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
                nrow(Regions_genelist[,oo]) - outTable[ll,"Observed"],
                ((nrow(Regions[,oo])-sum(Regions[,oo]))) - (nrow(Regions_genelist[,oo]) - outTable[ll,"Observed"])),
              nrow=2, byrow=T)
+      row_sums=rowSums(mat_reg)
+      col_sums=colSums(mat_reg)
+      tot_sum=sum(mat_reg)
+      exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                       row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+      bool_mat=exp_mat<mat_reg
+      mat_reg_correctded=mat_reg+as.data.frame.integer(bool_mat)
       if (enrORdep == "enr") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg, alternative = "g")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg_correctded, alternative = "g")$p.value
       } else if (enrORdep == "dep") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg, alternative = "l")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg_correctded, alternative = "l")$p.value
       } else if (enrORdep == "both") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg, alternative = "t")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_reg_correctded, alternative = "t")$p.value
       }
       
       # if (enrORdep == "enr") {
@@ -232,12 +261,19 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
                           nrow(GermLayers_genelist[,oo]) - outTable[ll,"Observed"],
                           ((nrow(GermLayers[,oo])-sum(GermLayers[,oo]))) - (nrow(GermLayers_genelist[,oo]) - outTable[ll,"Observed"])),
                         nrow=2, byrow=T)
+      row_sums=rowSums(mat_gel)
+      col_sums=colSums(mat_gel)
+      tot_sum=sum(mat_gel)
+      exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                       row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+      bool_mat=exp_mat<mat_gel
+      mat_gel_correctded=mat_gel+as.data.frame.integer(bool_mat)
       if (enrORdep == "enr") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel, alternative = "g")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel_correctded, alternative = "g")$p.value
       } else if (enrORdep == "dep") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel, alternative = "l")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel_correctded, alternative = "l")$p.value
       } else if (enrORdep == "both") {
-        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel, alternative = "t")$p.value
+        outTable[ll,"P-value"] <- stats::fisher.test(mat_gel_correctded, alternative = "t")$p.value
       }
       
       # if (enrORdep == "enr") {
@@ -261,7 +297,9 @@ ORGANizer_Organize <- function(genelist,background,outpath,curationLevel,FreqOfP
   }
   
   #WRITE FILE
-  write.table(outTable, file=paste0(outpath,"GeneORGANizer_ORGANize.txt"),
+  write.table(outTable, file=paste0(outpath,"GeneORGANizer_ORGANize","_v",
+                                    DBversion,"_",minGenes,"_",enrORdep,"_",
+                                    FreqOfPheno,"_",comp,"_",onlySkel,".txt"), 
               sep="\t", quote = F,na = "", row.names = F, col.names = T)
   
   return(outTable)

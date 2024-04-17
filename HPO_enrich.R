@@ -12,8 +12,10 @@
 # systems - a list of systems. When the user supplies a list of systems, the function will only analyze phenotypes associated with these systems. Any system that appears in Gene ORGANizer can be used.
 # directional - T or F. T: analyze only directional phenotypes (i.e., phenotypes that can be described on a scale)
 #enrORdep - check for enrichment or depletion?
+#locORser - running locally or on the server - affects on DBdir
+#comp - string variable - "diff_activity" - diff_active vs. active or "activity" - active vs. all
 
-HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorALL, HPO_dbVer, systems, bodyparts, directional, enrORdep)
+HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorALL, HPO_dbVer, systems, bodyparts, directional, enrORdep,locORser,comp)
 {
   if (missing(background)) {background <- c()}
   if (missing(appendix)) {appendix <- ""}
@@ -25,11 +27,14 @@ HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorA
   if (missing(directional)) {directional <- F}
   if (missing(outpath)) {outpath <- "/Users/dgokhman/HUJI drive/R/R outputs/"}
   if (missing(enrORdep)) {enrORdep <- "enr"}
-  
+  if (missing(locORser)) {locORser <- "loc"}
+  if (missing(comp)) {comp <- "diff_activity"}
   genelist <- unique(unlist(genelist))
   background <- unique(unlist(background))
-  
-  load(paste("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/HPO/HPO_world/HPO_World_",TYPorALL,"_",HPO_dbVer,".RData",sep=""))
+  if (locORser=="ser"){
+    load(paste("/home/labs/davidgo/Collaboration/USEFUL DATASETS/Annotation DBs/HPO/HPO_world/HPO_World_",TYPorALL,"_",HPO_dbVer,".RData",sep=""))
+  } else{  load(paste("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/HPO/HPO_world/HPO_World_",TYPorALL,"_",HPO_dbVer,".RData",sep=""))
+    }
   
   #CONCATENATE BODY PARTS
   bodyparts_conc <- paste0(bodyparts,collapse = ", ")
@@ -52,7 +57,10 @@ HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorA
   } else if (HPO_dbVer == 13) {sheet <- "Pheno - build115 - v13"
   } else if (HPO_dbVer == 12) {sheet <- "Pheno - v12"
   }
-  HPO_ORGANizer_anno <- read_excel("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/HPO/specific phenotype ontology.xlsx",skip=0,sheet=sheet,col_names=T)
+  if (locORser=="ser"){
+    HPO_ORGANizer_anno <- read_excel("/home/labs/davidgo/Collaboration/USEFUL DATASETS/Annotation DBs/HPO/specific phenotype ontology.xlsx",skip=0,sheet=sheet,col_names=T)
+  } else{  HPO_ORGANizer_anno <- read_excel("Gokhman lab general info/USEFUL DATASETS/Annotation DBs/HPO/specific phenotype ontology.xlsx",skip=0,sheet=sheet,col_names=T)
+  }
   HPO_ORGANizer_anno <- HPO_ORGANizer_anno[,c("HPO-ID","system","organ / body part")]
   
   #FILTER TO TAKE ONLY THE USER-ENTERED BODY PART
@@ -172,12 +180,19 @@ HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorA
                           N_entered - n_entered,          #number of diff active genes that aren't associated to the phenotype
                           (N_world-n_world) - (N_entered - n_entered)),  #number of active, non-diff active genes that aren't associated to the phenotype
                         nrow=2, byrow=T)
+      row_sums=rowSums(mat_hpo)
+      col_sums=colSums(mat_hpo)
+      tot_sum=sum(mat_hpo)
+      exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                       row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+      bool_mat=exp_mat<mat_hpo
+      mat_hpo_correctded=mat_hpo+as.data.frame.integer(bool_mat)
       if (enrORdep == "enr") {
-        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo, alternative = "g")$p.value
+        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo_correctded, alternative = "g")$p.value
       } else if (enrORdep == "dep") {
-        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo, alternative = "l")$p.value
+        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo_correctded, alternative = "l")$p.value
       } else if (enrORdep == "both") {
-        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo, alternative = "t")$p.value
+        StatMat$'P-value'[hpo] <- stats::fisher.test(mat_hpo_correctded, alternative = "t")$p.value
       }
       
       # if (enrORdep == "enr") {
@@ -207,7 +222,9 @@ HPO_enrich <- function(genelist, outpath, appendix, background, minGenes, TYPorA
   
   #SAVE OUTPUT
   write.table(StatMat, 
-              file=paste(outpath,"HPO_enrich",appendix,"_minGenes",minGenes,".txt",sep=""), 
+              file=paste(outpath,"HPO_enrich_","v",HPO_dbVer,"_",
+                         minGenes,"_",systems,"_","bp_",bodyparts,"_","freq_",
+                         TYPorALL,"_",enrORdep,".txt",sep=""), 
               sep="\t", quote = F,na = "", row.names = F, col.names = T)
   
   return(StatMat)

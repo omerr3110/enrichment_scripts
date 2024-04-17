@@ -9,19 +9,29 @@
 #"enr" in enrORdep then the minGenes is the minimum number of *observed* genes from the list found per term.
 #If the user chose "dep" in enrORdep then minGenes is the min number of *expected* genes from the list per term.
 #outdir - where to save output file. If not entered, default is /Users/dgokhman/HUJI drive/R/R outputs/
+#locORser - running locally or on the server - affects on DBdir
+#comp - string variable - "diff_activity" - diff_active vs. active or "activity" - active vs. all
+#uniq - use unique gene lists or redundant
 
-TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORdep)
+TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORdep,locORser,comp)
 {
   if (missing(db)) {db <- "GO_BP"}
   if (missing(background)) {background <- c()}
   if (missing(minGenes)) {minGenes <- 0}
   if (missing(outdir)) {outdir <- "/Users/dgokhman/HUJI drive/R/R outputs/"}
-  if (missing(enrORdep)) {enrORdep <- "enr"}
+  if (missing(enrORdep)) {enrORdep <- "both"}
+  if (missing(locORser)) {locORser <- "loc"}
+  if (missing(comp)) {comp <- "diff_activity"}
   
   #load DB
   geneCol <- 1
   catCol <- 2
-  DBdir <- 'Gokhman lab general info/USEFUL DATASETS/Annotation DBs/'
+  if (locORser=="ser"){
+    DBdir <- '/home/labs/davidgo/Collaboration/USEFUL DATASETS/Annotation DBs/'
+    
+  } else {
+    DBdir <- 'Gokhman lab general info/USEFUL DATASETS/Annotation DBs/'
+  }
   if (db == "GO_BP") {
     input_path_gene2category <- paste(DBdir,"DAVIDKnowledgebase/DAVIDKnowledgebase_current/OFFICIAL_GENE_SYMBOL2GOTERM_BP_FAT.txt",sep="")
   } else if (db == "GO_MF") {
@@ -58,11 +68,17 @@ TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORde
   
   #intersect genelist with DB
   uniqueGenes <- unique(unlist(genelist))
+  #print(length(uniqueGenes))
   idxGenes <- which(unlist(gene2cat_World[,geneCol]) %in% uniqueGenes)
+  print(length(idxGenes))
   gene2cat_intersectedWithGenelist <- gene2cat_World[idxGenes,]
+  print(head(gene2cat_intersectedWithGenelist))
   intersectedGenes <- intersect(unlist(gene2cat_World[,geneCol]),unlist(genelist))
+  print(length(intersectedGenes))
   idxGenes <- match(intersectedGenes,gene2cat_World[,geneCol])
+  print(length(idxGenes))
   gene2cat_intersectedWithGenelist_unique <- gene2cat_World[idxGenes,]
+  print(head(gene2cat_intersectedWithGenelist_unique))
   
   colnames <- c("DB","Unique IDs entered","Genes from genelist in DB","Term","Enrichment","Observed","Expected","Genes","P-value","FDR")
   uniqueTerms <- unique(unlist(gene2cat_World[,catCol]))
@@ -94,14 +110,24 @@ TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORde
                               outTable[ll,"Genes from genelist in DB"] - outTable[ll,"Observed"],
                             (length(uniqueGenes_inDB)-numGenes4term_DB) - (outTable[ll,"Genes from genelist in DB"] - outTable[ll,"Observed"])),
                           nrow=2, byrow=T)
+        #print("matgrand")
+        #print(mat_grand)
+        row_sums=rowSums(mat_grand)
+        col_sums=colSums(mat_grand)
+        tot_sum=sum(mat_grand)
+        exp_mat=matrix(c(row_sums[1]*col_sums[1]/tot_sum,row_sums[2]*col_sums[1]/tot_sum,
+                         row_sums[1]*col_sums[2]/tot_sum,row_sums[2]*col_sums[2]/tot_sum),nrow=2)
+        bool_mat=exp_mat<mat_grand
+        mat_grand_correctded=mat_grand+as.data.frame.integer(bool_mat)
         if (enrORdep == "enr") {
-          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand, alternative = "g")$p.value
+          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand_correctded, alternative = "g")$p.value
         } else if (enrORdep == "dep") {
-          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand, alternative = "l")$p.value
+          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand_correctded, alternative = "l")$p.value
         } else if (enrORdep == "both") {
-          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand, alternative = "t")$p.value
+          outTable[ll,"P-value"] <- stats::fisher.test(mat_grand_correctded, alternative = "t")$p.value
         }
-        
+        #print(phyper(outTable[ll,"Observed"],numGenes4term_DB,(length(uniqueGenes_inDB)-numGenes4term_DB),outTable[ll,"Genes from genelist in DB"],lower.tail=F))
+        #print(c(outTable[ll,"Observed"],numGenes4term_DB,(length(uniqueGenes_inDB)-numGenes4term_DB),outTable[ll,"Genes from genelist in DB"]))
         # if (enrORdep == "enr") {
         #   outTable[ll,"P-value"] <- phyper(outTable[ll,"Observed"],numGenes4term_DB,(length(uniqueGenes_inDB)-numGenes4term_DB),outTable[ll,"Genes from genelist in DB"],lower.tail=F)
         # } else if (enrORdep == "dep") {
@@ -137,7 +163,7 @@ TheGrandEnrich_enrich <- function(db,genelist,background,minGenes,outdir,enrORde
   
   #WRITE FILE
   if (substr(outdir,nchar(outdir)-1,nchar(outdir)) != "/") {outdir <- paste(outdir,"/",sep="")}
-  write.table(outTable, file=paste(outdir,db,"_TheGrandEnrich_enrich.txt",sep=""), 
+  write.table(outTable, file=paste(outdir,db,"_",minGenes,"_",enrORdep,"_",comp,"_",uniq,"_TheGrandEnrich_enrich.txt",sep=""), 
               sep="\t", quote = F,na = "", row.names = F, col.names = T)
   
   return(outTable)
